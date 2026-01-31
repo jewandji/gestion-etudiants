@@ -268,15 +268,77 @@ def ensure_tables_and_seed():
     """)
 
     # seed admin if none
-    cur.execute("SELECT COUNT(*) FROM users;")
-    if cur.fetchone()[0] == 0:
-        cur.execute("""
-            INSERT INTO users (username, password_hash, role, nom, prenom, date_creation, actif)
-            VALUES (?, ?, ?, ?, ?, ?, 1);
-        """, ("admin", hash_password("admin123"), "ADMIN", "Admin", "Système", now_iso()))
+    try:
+        cur.execute("SELECT COUNT(*) FROM users;")
+        user_count = cur.fetchone()[0]
+    except Exception as e:
+        print(f"Erreur vérification users: {e}")
+        user_count = 0
+    
+    if user_count == 0:
+        try:
+            cur.execute("""
+                INSERT INTO users (username, password_hash, role, nom, prenom, date_creation, actif)
+                VALUES (?, ?, ?, ?, ?, ?, 1);
+            """, ("admin", hash_password("admin123"), "ADMIN", "Admin", "Système", now_iso()))
+            print("✓ Utilisateur admin créé avec succès")
+        except Exception as e:
+            print(f"Erreur création admin: {e}")
 
-    conn.commit()
-    conn.close()
+    try:
+        conn.commit()
+        print("✓ Base de données initialisée avec succès")
+    except Exception as e:
+        print(f"Erreur commit: {e}")
+    finally:
+        conn.close()
+    
+    # Appliquer les migrations
+    migrate_database()
+
+
+def migrate_database():
+    """Ajoute les colonnes manquantes à la table etudiants si nécessaire"""
+    conn = db_connect()
+    cur = conn.cursor()
+    
+    try:
+        # Vérifier les colonnes existantes
+        cur.execute("PRAGMA table_info(etudiants)")
+        existing_columns = {row[1] for row in cur.fetchall()}
+        
+        # Colonnes requises
+        required_columns = {
+            'date_naissance', 'lieu_naissance', 'sexe', 
+            'telephone', 'adresse', 'photo_path', 'date_inscription'
+        }
+        
+        # Ajouter les colonnes manquantes
+        for col in required_columns:
+            if col not in existing_columns:
+                try:
+                    if col == 'date_inscription':
+                        cur.execute(f"ALTER TABLE etudiants ADD COLUMN {col} TEXT")
+                    elif col == 'telephone':
+                        cur.execute(f"ALTER TABLE etudiants ADD COLUMN {col} TEXT")
+                    elif col == 'adresse':
+                        cur.execute(f"ALTER TABLE etudiants ADD COLUMN {col} TEXT")
+                    elif col == 'photo_path':
+                        cur.execute(f"ALTER TABLE etudiants ADD COLUMN {col} TEXT")
+                    elif col == 'sexe':
+                        cur.execute(f"ALTER TABLE etudiants ADD COLUMN {col} TEXT DEFAULT 'M'")
+                    else:
+                        cur.execute(f"ALTER TABLE etudiants ADD COLUMN {col} TEXT")
+                    print(f"✓ Colonne {col} ajoutée à la table etudiants")
+                except Exception as e:
+                    print(f"Colonne {col} existe déjà ou erreur: {e}")
+        
+        conn.commit()
+        print("✓ Migration base de données complétée")
+    except Exception as e:
+        print(f"Erreur migration: {e}")
+    finally:
+        conn.close()
 
 
 def log_action(conn, user_id: int, action: str, table_affectee: str, enregistrement_id: int = None, details: str = None):
@@ -517,6 +579,13 @@ class App(tk.Toplevel):
         self.tab_documents = ttk.Frame(self.tabs)
         self.tab_users = ttk.Frame(self.tabs)
 
+        # Initialize filter variables BEFORE builds
+        self.var_search_name = tk.StringVar()
+        self.var_filter_filiere = tk.StringVar()
+        self.var_filter_niveau = tk.StringVar()
+        self.var_filter_statut = tk.StringVar()
+        self.var_filter_groupe = tk.StringVar()
+
         self.tabs.add(self.tab_etudiants, text="Étudiants")
         self.tabs.add(self.tab_academique, text="Filières & Niveaux")
         self.tabs.add(self.tab_inscriptions, text="Inscriptions")
@@ -572,13 +641,6 @@ class App(tk.Toplevel):
 
         left = ttk.LabelFrame(frm, text="Ajouter un étudiant", padding=10)
         left.pack(side="left", fill="y", padx=(0, 10))
-        
-        # Initialize filter variables
-        self.var_search_name = tk.StringVar()
-        self.var_filter_filiere = tk.StringVar()
-        self.var_filter_niveau = tk.StringVar()
-        self.var_filter_statut = tk.StringVar()
-        self.var_filter_groupe = tk.StringVar()
 
         # INFORMATIONS PERSONNELLES
         ttk.Label(left, text="Nom *").grid(row=0, column=0, sticky="w", pady=4)
@@ -736,10 +798,20 @@ class App(tk.Toplevel):
                 now_iso()
             ))
             conn.commit()
+            print(f"✓ Étudiant ajouté: {matricule} - {nom} {prenom}")
         except sqlite3.IntegrityError as e:
-            messagebox.showerror("Erreur", "Email déjà utilisé (ou conflit matricule).")
-        finally:
+            messagebox.showerror("Erreur", f"Email déjà utilisé ou conflit matricule.\n{str(e)}")
+            print(f"Erreur IntegrityError: {e}")
             conn.close()
+            return
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Erreur lors de l'ajout: {str(e)}")
+            print(f"Erreur générale: {e}")
+            conn.close()
+            return
+        finally:
+            if not conn:
+                conn.close()
 
         # Réinitialiser le formulaire
         self.e_nom.delete(0, tk.END)
@@ -769,6 +841,24 @@ class App(tk.Toplevel):
     def refresh_etudiants_list(self):
         if not hasattr(self, "tree_etudiants"):
             return
+        
+        # Vérifier si des filtres sont actifs
+        has_active_filters = False
+        if hasattr(self, "var_search_name"):
+            has_active_filters = (
+                self.var_search_name.get().strip() or
+                self.var_filter_filiere.get().strip() or
+                self.var_filter_niveau.get().strip() or
+                self.var_filter_statut.get().strip() or
+                self.var_filter_groupe.get().strip()
+            )
+        
+        # Si des filtres sont actifs, utiliser apply_etudiants_filters
+        if has_active_filters:
+            self.apply_etudiants_filters()
+            return
+        
+        # Sinon, afficher tous les étudiants
         for row in self.tree_etudiants.get_children():
             self.tree_etudiants.delete(row)
 
