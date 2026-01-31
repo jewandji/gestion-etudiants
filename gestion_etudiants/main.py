@@ -283,6 +283,66 @@ def log_action(conn, user_id: int, action: str, table_affectee: str, enregistrem
     conn.commit()
 
 
+def calculate_academic_honors(average: float) -> str:
+    """Calcule la mention académique en fonction de la moyenne
+    
+    Échelle:
+    - Excellente: >= 18/20
+    - Très bien: >= 16/20
+    - Bien: >= 14/20
+    - Assez bien: >= 12/20
+    - Passable: >= 10/20
+    - Insuffisant: < 10/20
+    """
+    if average >= 18:
+        return "Excellente"
+    elif average >= 16:
+        return "Très bien"
+    elif average >= 14:
+        return "Bien"
+    elif average >= 12:
+        return "Assez bien"
+    elif average >= 10:
+        return "Passable"
+    else:
+        return "Insuffisant"
+
+
+def get_student_average(etudiant_id: int, annee_academique: str = None) -> tuple:
+    """Récupère la moyenne générale d'un étudiant
+    
+    Retourne: (moyenne, mention, nombre_notes)
+    """
+    conn = db_connect()
+    cur = conn.cursor()
+    
+    if annee_academique:
+        cur.execute("""
+            SELECT AVG(note) FROM notes 
+            WHERE etudiant_id=? AND annee_academique=?
+        """, (etudiant_id, annee_academique))
+    else:
+        cur.execute("SELECT AVG(note) FROM notes WHERE etudiant_id=?", (etudiant_id,))
+    
+    avg_result = cur.fetchone()[0]
+    moyenne = float(avg_result) if avg_result else 0.0
+    
+    # Compter le nombre de notes
+    if annee_academique:
+        cur.execute("""
+            SELECT COUNT(*) FROM notes 
+            WHERE etudiant_id=? AND annee_academique=?
+        """, (etudiant_id, annee_academique))
+    else:
+        cur.execute("SELECT COUNT(*) FROM notes WHERE etudiant_id=?", (etudiant_id,))
+    
+    count = cur.fetchone()[0]
+    conn.close()
+    
+    mention = calculate_academic_honors(moyenne)
+    return (round(moyenne, 2), mention, count)
+
+
 # EXPORT HELPERS
 
 def export_query_to_xlsx(headers, rows, filepath: str, sheet_name="Export"):
@@ -365,7 +425,10 @@ def generate_transcript_pdf(conn, etudiant_id: int, filepath: str):
     c.setFont("Helvetica-Bold", 11)
     if total_coef > 0:
         moyenne = total_points / total_coef
+        mention = calculate_academic_honors(moyenne)
         c.drawString(2 * cm, y, f"Moyenne générale : {moyenne:.2f} / 20")
+        y -= 0.5 * cm
+        c.drawString(2 * cm, y, f"Mention : {mention}")
     else:
         c.drawString(2 * cm, y, "Moyenne générale : -")
 
@@ -743,13 +806,21 @@ class App(tk.Toplevel):
         ttk.Label(box_id, text=f"Nom : {etu[1]} {etu[2]}").grid(row=0, column=1, sticky="w", padx=6, pady=2)
         ttk.Label(box_id, text=f"Statut : {etu[9]}").grid(row=0, column=2, sticky="w", padx=6, pady=2)
         
-        ttk.Label(box_id, text=f"Email : {etu[3]}").grid(row=1, column=0, sticky="w", padx=6, pady=2)
-        ttk.Label(box_id, text=f"Téléphone : {etu[4]}").grid(row=1, column=1, sticky="w", padx=6, pady=2)
-        ttk.Label(box_id, text=f"Sexe : {etu[8]}").grid(row=1, column=2, sticky="w", padx=6, pady=2)
+        # Calculer et afficher la moyenne et mention
+        moyenne, mention, nb_notes = get_student_average(etu_id)
+        mention_color = "green" if mention in ["Excellente", "Très bien"] else "orange" if mention in ["Bien", "Assez bien"] else "red"
+        ttk.Label(box_id, text=f"Moyenne générale : {moyenne}/20").grid(row=1, column=0, sticky="w", padx=6, pady=2)
+        mention_label = ttk.Label(box_id, text=f"Mention : {mention}")
+        mention_label.grid(row=1, column=1, sticky="w", padx=6, pady=2)
+        ttk.Label(box_id, text=f"Notes : {nb_notes}").grid(row=1, column=2, sticky="w", padx=6, pady=2)
         
-        ttk.Label(box_id, text=f"Adresse : {etu[5][:40]}...").grid(row=2, column=0, columnspan=3, sticky="w", padx=6, pady=2)
-        ttk.Label(box_id, text=f"Date naissance : {etu[6]}").grid(row=3, column=0, sticky="w", padx=6, pady=2)
-        ttk.Label(box_id, text=f"Lieu naissance : {etu[7]}").grid(row=3, column=1, columnspan=2, sticky="w", padx=6, pady=2)
+        ttk.Label(box_id, text=f"Email : {etu[3]}").grid(row=2, column=0, sticky="w", padx=6, pady=2)
+        ttk.Label(box_id, text=f"Téléphone : {etu[4]}").grid(row=2, column=1, sticky="w", padx=6, pady=2)
+        ttk.Label(box_id, text=f"Sexe : {etu[8]}").grid(row=2, column=2, sticky="w", padx=6, pady=2)
+        
+        ttk.Label(box_id, text=f"Adresse : {etu[5][:40]}...").grid(row=3, column=0, columnspan=3, sticky="w", padx=6, pady=2)
+        ttk.Label(box_id, text=f"Date naissance : {etu[6]}").grid(row=4, column=0, sticky="w", padx=6, pady=2)
+        ttk.Label(box_id, text=f"Lieu naissance : {etu[7]}").grid(row=4, column=1, columnspan=2, sticky="w", padx=6, pady=2)
 
         nb = ttk.Notebook(frm)
         nb.pack(fill="both", expand=True, pady=10)
