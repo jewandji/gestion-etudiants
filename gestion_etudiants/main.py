@@ -993,8 +993,10 @@ class App(tk.Toplevel):
 
         lf = ttk.LabelFrame(frm, text="Filières", padding=10)
         ln = ttk.LabelFrame(frm, text="Niveaux", padding=10)
+        ls = ttk.LabelFrame(frm, text="Spécialités", padding=10)
         lf.pack(side="left", fill="both", expand=True, padx=(0, 10))
-        ln.pack(side="left", fill="both", expand=True)
+        ln.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        ls.pack(side="left", fill="both", expand=True)
 
         ttk.Label(lf, text="Code").grid(row=0, column=0, sticky="w", pady=4)
         ttk.Label(lf, text="Nom").grid(row=1, column=0, sticky="w", pady=4)
@@ -1020,6 +1022,28 @@ class App(tk.Toplevel):
 
         self.list_niveaux = tk.Listbox(ln, height=18, width=45)
         self.list_niveaux.grid(row=4, column=0, columnspan=2, pady=(12, 0), sticky="nsew")
+
+        # SPÉCIALITÉS
+        ttk.Label(ls, text="Filière").grid(row=0, column=0, sticky="w", pady=4)
+        self.var_spec_filiere = tk.StringVar()
+        self.cb_spec_filiere = ttk.Combobox(ls, textvariable=self.var_spec_filiere, width=25, state="readonly")
+        self.cb_spec_filiere.grid(row=0, column=1, pady=4)
+        self.cb_spec_filiere.bind("<<ComboboxSelected>>", lambda e: self.refresh_specialites_list())
+
+        ttk.Label(ls, text="Nom").grid(row=1, column=0, sticky="w", pady=4)
+        ttk.Label(ls, text="Description").grid(row=2, column=0, sticky="w", pady=4)
+        self.s_nom = ttk.Entry(ls, width=25)
+        self.s_description = ttk.Entry(ls, width=25)
+        self.s_nom.grid(row=1, column=1, pady=4)
+        self.s_description.grid(row=2, column=1, pady=4)
+
+        ttk.Button(ls, text="Ajouter spécialité", command=self.add_specialite).grid(row=3, column=1, sticky="e", pady=(10, 0))
+
+        self.list_specialites = tk.Listbox(ls, height=14, width=50)
+        self.list_specialites.grid(row=4, column=0, columnspan=2, pady=(12, 0), sticky="nsew")
+
+        # Boutons pour gérer spécialités
+        ttk.Button(ls, text="Supprimer", command=self.delete_specialite).grid(row=5, column=0, columnspan=2, sticky="ew", pady=(4, 0))
 
     def add_filiere(self):
         code = self.f_code.get().strip()
@@ -1089,6 +1113,7 @@ class App(tk.Toplevel):
         fil_values = [f"{fid} - {code} - {nom}" for (fid, code, nom) in self._filieres]
         if hasattr(self, "cb_filiere"): self.cb_filiere["values"] = fil_values
         if hasattr(self, "cb_mod_filiere"): self.cb_mod_filiere["values"] = fil_values
+        if hasattr(self, "refresh_specialites_combobox"): self.refresh_specialites_combobox()
 
     def refresh_niveaux(self):
         if not hasattr(self, "list_niveaux"):
@@ -1106,6 +1131,110 @@ class App(tk.Toplevel):
         niv_values = [f"{nid} - {code} - {nom}" for (nid, code, nom, _) in self._niveaux]
         if hasattr(self, "cb_niveau"): self.cb_niveau["values"] = niv_values
         if hasattr(self, "cb_mod_niveau"): self.cb_mod_niveau["values"] = niv_values
+
+    def refresh_specialites_combobox(self):
+        """Charger les filières dans le ComboBox des spécialités"""
+        if not hasattr(self, "cb_spec_filiere"):
+            return
+        conn = db_connect()
+        cur = conn.cursor()
+        cur.execute("SELECT id, code, nom FROM filieres ORDER BY code")
+        self._spec_filieres = cur.fetchall()
+        conn.close()
+        
+        spec_fil_values = [f"{fid} - {code} - {nom}" for (fid, code, nom) in self._spec_filieres]
+        self.cb_spec_filiere["values"] = spec_fil_values
+
+    def add_specialite(self):
+        """Ajouter une nouvelle spécialité"""
+        filiere_text = self.var_spec_filiere.get().strip()
+        nom = self.s_nom.get().strip()
+        description = self.s_description.get().strip()
+
+        if not filiere_text or not nom:
+            messagebox.showerror("Erreur", "Filière et nom spécialité obligatoires.")
+            return
+
+        try:
+            filiere_id = int(filiere_text.split(" - ")[0])
+        except (ValueError, IndexError):
+            messagebox.showerror("Erreur", "Sélectionnez une filière valide.")
+            return
+
+        conn = db_connect()
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "INSERT INTO specialites (filiere_id, nom, description) VALUES (?, ?, ?)",
+                (filiere_id, nom, description if description else None)
+            )
+            conn.commit()
+            messagebox.showinfo("OK", "Spécialité ajoutée.")
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Erreur lors de l'ajout: {str(e)}")
+        finally:
+            conn.close()
+
+        self.s_nom.delete(0, tk.END)
+        self.s_description.delete(0, tk.END)
+        self.refresh_specialites_list()
+        self.refresh_all()
+
+    def refresh_specialites_list(self):
+        """Rafraîchir la liste des spécialités selon la filière sélectionnée"""
+        if not hasattr(self, "list_specialites"):
+            return
+        
+        self.list_specialites.delete(0, tk.END)
+        
+        filiere_text = self.var_spec_filiere.get().strip()
+        if not filiere_text:
+            return
+
+        try:
+            filiere_id = int(filiere_text.split(" - ")[0])
+        except (ValueError, IndexError):
+            return
+
+        conn = db_connect()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, nom, COALESCE(description,'') FROM specialites WHERE filiere_id=? ORDER BY nom",
+            (filiere_id,)
+        )
+        self._specialites = cur.fetchall()
+        conn.close()
+
+        for (sid, nom, description) in self._specialites:
+            display = f"{sid} - {nom}"
+            if description:
+                display += f" ({description[:20]}...)" if len(description) > 20 else f" ({description})"
+            self.list_specialites.insert(tk.END, display)
+
+    def delete_specialite(self):
+        """Supprimer la spécialité sélectionnée"""
+        sel_idx = self.list_specialites.curselection()
+        if not sel_idx:
+            messagebox.showerror("Erreur", "Sélectionnez une spécialité à supprimer.")
+            return
+
+        spec_id = self._specialites[sel_idx[0]][0]
+        
+        if not messagebox.askyesno("Confirmation", "Supprimer cette spécialité ?"):
+            return
+
+        conn = db_connect()
+        cur = conn.cursor()
+        try:
+            cur.execute("DELETE FROM specialites WHERE id=?", (spec_id,))
+            conn.commit()
+            messagebox.showinfo("OK", "Spécialité supprimée.")
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Erreur lors de la suppression: {str(e)}")
+        finally:
+            conn.close()
+
+        self.refresh_specialites_list()
 
     # INSCRIPTIONS
 
