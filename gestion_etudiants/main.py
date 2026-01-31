@@ -479,6 +479,7 @@ class App(tk.Toplevel):
 
     def refresh_all(self):
         self.refresh_etudiants_list()
+        self.load_filter_options()
         self.refresh_filieres()
         self.refresh_niveaux()
         self.refresh_inscriptions_lists()
@@ -498,6 +499,13 @@ class App(tk.Toplevel):
 
         left = ttk.LabelFrame(frm, text="Ajouter un étudiant", padding=10)
         left.pack(side="left", fill="y", padx=(0, 10))
+        
+        # Initialize filter variables
+        self.var_search_name = tk.StringVar()
+        self.var_filter_filiere = tk.StringVar()
+        self.var_filter_niveau = tk.StringVar()
+        self.var_filter_statut = tk.StringVar()
+        self.var_filter_groupe = tk.StringVar()
 
         # INFORMATIONS PERSONNELLES
         ttk.Label(left, text="Nom *").grid(row=0, column=0, sticky="w", pady=4)
@@ -553,6 +561,41 @@ class App(tk.Toplevel):
 
         right = ttk.LabelFrame(frm, text="Liste des étudiants (double-clic = fiche)", padding=10)
         right.pack(side="left", fill="both", expand=True)
+
+        # FILTRES AVANCÉS
+        filter_frame = ttk.LabelFrame(right, text="Filtres avancés", padding=8)
+        filter_frame.pack(fill="x", pady=(0, 10))
+
+        ttk.Label(filter_frame, text="Recherche (nom/email):").grid(row=0, column=0, sticky="w", padx=4, pady=4)
+        e_search = ttk.Entry(filter_frame, textvariable=self.var_search_name, width=25)
+        e_search.grid(row=0, column=1, sticky="ew", padx=4, pady=4)
+        e_search.bind("<KeyRelease>", lambda e: self.apply_etudiants_filters())
+
+        ttk.Label(filter_frame, text="Filière:").grid(row=0, column=2, sticky="w", padx=4, pady=4)
+        self.cb_filter_filiere = ttk.Combobox(filter_frame, textvariable=self.var_filter_filiere, width=15, state="readonly")
+        self.cb_filter_filiere.grid(row=0, column=3, sticky="ew", padx=4, pady=4)
+        self.cb_filter_filiere.bind("<<ComboboxSelected>>", lambda e: self.apply_etudiants_filters())
+
+        ttk.Label(filter_frame, text="Niveau:").grid(row=1, column=0, sticky="w", padx=4, pady=4)
+        self.cb_filter_niveau = ttk.Combobox(filter_frame, textvariable=self.var_filter_niveau, width=15, state="readonly")
+        self.cb_filter_niveau.grid(row=1, column=1, sticky="ew", padx=4, pady=4)
+        self.cb_filter_niveau.bind("<<ComboboxSelected>>", lambda e: self.apply_etudiants_filters())
+
+        ttk.Label(filter_frame, text="Statut:").grid(row=1, column=2, sticky="w", padx=4, pady=4)
+        self.cb_filter_statut = ttk.Combobox(filter_frame, textvariable=self.var_filter_statut, 
+                                            values=["", "actif", "suspendu", "diplômé"], width=15, state="readonly")
+        self.cb_filter_statut.grid(row=1, column=3, sticky="ew", padx=4, pady=4)
+        self.cb_filter_statut.bind("<<ComboboxSelected>>", lambda e: self.apply_etudiants_filters())
+
+        ttk.Label(filter_frame, text="Groupe:").grid(row=2, column=0, sticky="w", padx=4, pady=4)
+        self.cb_filter_groupe = ttk.Combobox(filter_frame, textvariable=self.var_filter_groupe, width=15, state="readonly")
+        self.cb_filter_groupe.grid(row=2, column=1, sticky="ew", padx=4, pady=4)
+        self.cb_filter_groupe.bind("<<ComboboxSelected>>", lambda e: self.apply_etudiants_filters())
+
+        ttk.Button(filter_frame, text="Réinitialiser", command=self.reset_etudiants_filters).grid(row=2, column=2, columnspan=2, sticky="ew", padx=4, pady=4)
+
+        filter_frame.columnconfigure(1, weight=1)
+        filter_frame.columnconfigure(3, weight=1)
 
         cols = ("id", "matricule", "nom", "prenom", "email", "telephone", "statut")
         self.tree_etudiants = ttk.Treeview(right, columns=cols, show="headings", height=22)
@@ -846,6 +889,101 @@ class App(tk.Toplevel):
         conn.close()
         export_query_to_xlsx(["id", "matricule", "nom", "prenom", "email", "statut"], rows, path, "etudiants")
         messagebox.showinfo("OK", "Export Excel terminé.")
+
+    def load_filter_options(self):
+        """Charger les options des filtres (filières, niveaux, groupes)"""
+        conn = db_connect()
+        cur = conn.cursor()
+        
+        # Charger filières
+        cur.execute("SELECT code || ' - ' || nom FROM filieres ORDER BY nom")
+        filieres = [""] + [row[0] for row in cur.fetchall()]
+        self.cb_filter_filiere["values"] = filieres
+        
+        # Charger niveaux
+        cur.execute("SELECT code || ' - ' || nom FROM niveaux ORDER BY ordre")
+        niveaux = [""] + [row[0] for row in cur.fetchall()]
+        self.cb_filter_niveau["values"] = niveaux
+        
+        # Charger groupes
+        cur.execute("SELECT code || ' - ' || nom FROM groupes ORDER BY nom")
+        groupes = [""] + [row[0] for row in cur.fetchall()]
+        self.cb_filter_groupe["values"] = groupes
+        
+        conn.close()
+
+    def apply_etudiants_filters(self):
+        """Appliquer les filtres avancés à la liste des étudiants"""
+        if not hasattr(self, "tree_etudiants"):
+            return
+        
+        for row in self.tree_etudiants.get_children():
+            self.tree_etudiants.delete(row)
+
+        # Récupérer les critères de filtre
+        search_text = self.var_search_name.get().strip().lower()
+        filiere_text = self.var_filter_filiere.get().strip()
+        niveau_text = self.var_filter_niveau.get().strip()
+        statut_text = self.var_filter_statut.get().strip()
+        groupe_text = self.var_filter_groupe.get().strip()
+
+        conn = db_connect()
+        cur = conn.cursor()
+
+        # Construire la requête SQL avec les filtres
+        query = """
+            SELECT DISTINCT e.id, e.matricule, e.nom, e.prenom, COALESCE(e.email,''), COALESCE(e.telephone,''), COALESCE(e.statut,'')
+            FROM etudiants e
+            LEFT JOIN inscriptions i ON e.id = i.etudiant_id
+            LEFT JOIN filieres f ON i.filiere_id = f.id
+            LEFT JOIN niveaux n ON i.niveau_id = n.id
+            LEFT JOIN groupes g ON i.groupe_id = g.id
+            WHERE 1=1
+        """
+        params = []
+
+        # Ajouter les conditions de filtre
+        if search_text:
+            query += " AND (LOWER(e.nom) LIKE ? OR LOWER(e.prenom) LIKE ? OR LOWER(e.email) LIKE ? OR e.matricule LIKE ?)"
+            search_param = f"%{search_text}%"
+            params.extend([search_param, search_param, search_param, search_param])
+
+        if filiere_text:
+            filiere_code = filiere_text.split(" - ")[0]
+            query += " AND f.code = ?"
+            params.append(filiere_code)
+
+        if niveau_text:
+            niveau_code = niveau_text.split(" - ")[0]
+            query += " AND n.code = ?"
+            params.append(niveau_code)
+
+        if statut_text:
+            query += " AND e.statut = ?"
+            params.append(statut_text)
+
+        if groupe_text:
+            groupe_code = groupe_text.split(" - ")[0]
+            query += " AND g.code = ?"
+            params.append(groupe_code)
+
+        query += " ORDER BY e.id DESC"
+
+        cur.execute(query, params)
+        rows = cur.fetchall()
+        conn.close()
+
+        for r in rows:
+            self.tree_etudiants.insert("", "end", values=r)
+
+    def reset_etudiants_filters(self):
+        """Réinitialiser tous les filtres"""
+        self.var_search_name.set("")
+        self.var_filter_filiere.set("")
+        self.var_filter_niveau.set("")
+        self.var_filter_statut.set("")
+        self.var_filter_groupe.set("")
+        self.refresh_etudiants_list()
 
     # ACADEMIQUE
 
