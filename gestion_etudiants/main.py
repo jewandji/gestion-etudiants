@@ -44,15 +44,22 @@ def ensure_tables_and_seed():
     conn = db_connect()
     cur = conn.cursor()
 
-    # core
+    # core - ENRICHED
     cur.execute("""
         CREATE TABLE IF NOT EXISTS etudiants (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             matricule TEXT UNIQUE NOT NULL,
             nom TEXT NOT NULL,
             prenom TEXT NOT NULL,
+            date_naissance TEXT,
+            lieu_naissance TEXT,
+            sexe TEXT,
+            telephone TEXT,
+            adresse TEXT,
+            photo_path TEXT,
             email TEXT UNIQUE,
-            statut TEXT DEFAULT 'actif'
+            statut TEXT DEFAULT 'actif',
+            date_inscription TEXT
         );
     """)
 
@@ -79,11 +86,14 @@ def ensure_tables_and_seed():
             etudiant_id INTEGER NOT NULL,
             filiere_id INTEGER NOT NULL,
             niveau_id INTEGER NOT NULL,
+            groupe_id INTEGER,
             annee_academique TEXT NOT NULL,
             statut TEXT DEFAULT 'inscrit',
+            date_inscription TEXT,
             FOREIGN KEY(etudiant_id) REFERENCES etudiants(id) ON DELETE CASCADE,
             FOREIGN KEY(filiere_id) REFERENCES filieres(id) ON DELETE RESTRICT,
-            FOREIGN KEY(niveau_id) REFERENCES niveaux(id) ON DELETE RESTRICT
+            FOREIGN KEY(niveau_id) REFERENCES niveaux(id) ON DELETE RESTRICT,
+            FOREIGN KEY(groupe_id) REFERENCES groupes(id) ON DELETE SET NULL
         );
     """)
 
@@ -185,14 +195,69 @@ def ensure_tables_and_seed():
         );
     """)
 
-    # login/users 
+    # login/users - ENRICHED
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL,
+            nom TEXT,
+            prenom TEXT,
+            email TEXT UNIQUE,
+            date_creation TEXT,
             actif INTEGER DEFAULT 1
+        );
+    """)
+
+    # NEW TABLES
+
+    # specialites
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS specialites (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filiere_id INTEGER NOT NULL,
+            nom TEXT NOT NULL,
+            description TEXT,
+            FOREIGN KEY(filiere_id) REFERENCES filieres(id) ON DELETE CASCADE
+        );
+    """)
+
+    # groupes
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS groupes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT UNIQUE NOT NULL,
+            nom TEXT NOT NULL,
+            filiere_id INTEGER,
+            niveau_id INTEGER,
+            FOREIGN KEY(filiere_id) REFERENCES filieres(id) ON DELETE SET NULL,
+            FOREIGN KEY(niveau_id) REFERENCES niveaux(id) ON DELETE SET NULL
+        );
+    """)
+
+    # logs (audit trail)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            action TEXT NOT NULL,
+            table_affectee TEXT,
+            enregistrement_id INTEGER,
+            details TEXT,
+            date_action TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+        );
+    """)
+
+    # parametres (configuration)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS parametres (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cle TEXT UNIQUE NOT NULL,
+            valeur TEXT NOT NULL,
+            description TEXT,
+            type_donnee TEXT
         );
     """)
 
@@ -200,12 +265,22 @@ def ensure_tables_and_seed():
     cur.execute("SELECT COUNT(*) FROM users;")
     if cur.fetchone()[0] == 0:
         cur.execute("""
-            INSERT INTO users (username, password_hash, role, actif)
-            VALUES (?, ?, ?, 1);
-        """, ("admin", hash_password("admin123"), "ADMIN"))
+            INSERT INTO users (username, password_hash, role, nom, prenom, date_creation, actif)
+            VALUES (?, ?, ?, ?, ?, ?, 1);
+        """, ("admin", hash_password("admin123"), "ADMIN", "Admin", "Système", now_iso()))
 
     conn.commit()
     conn.close()
+
+
+def log_action(conn, user_id: int, action: str, table_affectee: str, enregistrement_id: int = None, details: str = None):
+    """Enregistre une action dans la table logs pour l'audit"""
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO logs (user_id, action, table_affectee, enregistrement_id, details, date_action)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (user_id, action, table_affectee, enregistrement_id, details, now_iso()))
+    conn.commit()
 
 
 # EXPORT HELPERS
@@ -424,35 +499,71 @@ class App(tk.Toplevel):
         left = ttk.LabelFrame(frm, text="Ajouter un étudiant", padding=10)
         left.pack(side="left", fill="y", padx=(0, 10))
 
-        ttk.Label(left, text="Nom").grid(row=0, column=0, sticky="w", pady=4)
-        ttk.Label(left, text="Prénom").grid(row=1, column=0, sticky="w", pady=4)
+        # INFORMATIONS PERSONNELLES
+        ttk.Label(left, text="Nom *").grid(row=0, column=0, sticky="w", pady=4)
+        ttk.Label(left, text="Prénom *").grid(row=1, column=0, sticky="w", pady=4)
         ttk.Label(left, text="Email").grid(row=2, column=0, sticky="w", pady=4)
+        ttk.Label(left, text="Téléphone").grid(row=3, column=0, sticky="w", pady=4)
+        ttk.Label(left, text="Adresse").grid(row=4, column=0, sticky="w", pady=4)
 
         self.e_nom = ttk.Entry(left, width=28)
         self.e_prenom = ttk.Entry(left, width=28)
         self.e_email = ttk.Entry(left, width=28)
+        self.e_telephone = ttk.Entry(left, width=28)
+        self.e_adresse = ttk.Entry(left, width=28)
 
         self.e_nom.grid(row=0, column=1, pady=4)
         self.e_prenom.grid(row=1, column=1, pady=4)
         self.e_email.grid(row=2, column=1, pady=4)
+        self.e_telephone.grid(row=3, column=1, pady=4)
+        self.e_adresse.grid(row=4, column=1, pady=4)
 
-        ttk.Button(left, text="Ajouter", command=self.add_etudiant).grid(row=3, column=1, sticky="e", pady=(10, 0))
+        # INFORMATIONS ACADEMIQUES
+        ttk.Label(left, text="Date naissance").grid(row=5, column=0, sticky="w", pady=4)
+        ttk.Label(left, text="Lieu naissance").grid(row=6, column=0, sticky="w", pady=4)
+        ttk.Label(left, text="Sexe").grid(row=7, column=0, sticky="w", pady=4)
 
-        ttk.Separator(left, orient="horizontal").grid(row=4, column=0, columnspan=2, sticky="ew", pady=12)
+        self.e_date_naissance = ttk.Entry(left, width=28)
+        self.e_lieu_naissance = ttk.Entry(left, width=28)
+        self.var_sexe = tk.StringVar(value="M")
+        self.cb_sexe = ttk.Combobox(left, textvariable=self.var_sexe, values=["M", "F", "Autre"], width=25, state="readonly")
 
-        ttk.Button(left, text="Importer CSV", command=self.import_etudiants_csv).grid(row=5, column=0, columnspan=2, sticky="ew", pady=4)
-        ttk.Button(left, text="Exporter CSV", command=self.export_etudiants_csv).grid(row=6, column=0, columnspan=2, sticky="ew", pady=4)
-        ttk.Button(left, text="Exporter Excel", command=self.export_etudiants_xlsx).grid(row=7, column=0, columnspan=2, sticky="ew", pady=4)
+        self.e_date_naissance.grid(row=5, column=1, pady=4)
+        self.e_lieu_naissance.grid(row=6, column=1, pady=4)
+        self.cb_sexe.grid(row=7, column=1, pady=4)
+
+        ttk.Label(left, text="Format: YYYY-MM-DD", font=("", 8)).grid(row=5, column=2, sticky="w", padx=4)
+
+        # PHOTO
+        ttk.Label(left, text="Photo").grid(row=8, column=0, sticky="w", pady=4)
+        self.lbl_photo_path = ttk.Label(left, text="Aucune photo", foreground="gray", width=25)
+        self.lbl_photo_path.grid(row=8, column=1, pady=4, sticky="w")
+        ttk.Button(left, text="Sélectionner", command=self.select_photo_student).grid(row=8, column=2, padx=4)
+
+        # Stocker le chemin de la photo
+        self.photo_path_temp = None
+
+        ttk.Button(left, text="Ajouter", command=self.add_etudiant).grid(row=9, column=1, sticky="e", pady=(10, 0))
+
+        ttk.Separator(left, orient="horizontal").grid(row=10, column=0, columnspan=3, sticky="ew", pady=12)
+
+        ttk.Button(left, text="Importer CSV", command=self.import_etudiants_csv).grid(row=11, column=0, columnspan=3, sticky="ew", pady=4)
+        ttk.Button(left, text="Exporter CSV", command=self.export_etudiants_csv).grid(row=12, column=0, columnspan=3, sticky="ew", pady=4)
+        ttk.Button(left, text="Exporter Excel", command=self.export_etudiants_xlsx).grid(row=13, column=0, columnspan=3, sticky="ew", pady=4)
 
         right = ttk.LabelFrame(frm, text="Liste des étudiants (double-clic = fiche)", padding=10)
         right.pack(side="left", fill="both", expand=True)
 
-        cols = ("id", "matricule", "nom", "prenom", "email", "statut")
+        cols = ("id", "matricule", "nom", "prenom", "email", "telephone", "statut")
         self.tree_etudiants = ttk.Treeview(right, columns=cols, show="headings", height=22)
         for c in cols:
             self.tree_etudiants.heading(c, text=c)
-            self.tree_etudiants.column(c, width=120 if c != "email" else 260, anchor="w")
-        self.tree_etudiants.column("id", width=50, anchor="center")
+            if c == "id":
+                self.tree_etudiants.column(c, width=50, anchor="center")
+            elif c in ("email", "telephone"):
+                self.tree_etudiants.column(c, width=140, anchor="w")
+            else:
+                self.tree_etudiants.column(c, width=120, anchor="w")
 
         self.tree_etudiants.pack(fill="both", expand=True)
         self.tree_etudiants.bind("<Double-1>", self.open_fiche_etudiant)
@@ -476,6 +587,12 @@ class App(tk.Toplevel):
         nom = self.e_nom.get().strip()
         prenom = self.e_prenom.get().strip()
         email = self.e_email.get().strip()
+        telephone = self.e_telephone.get().strip()
+        adresse = self.e_adresse.get().strip()
+        date_naissance = self.e_date_naissance.get().strip()
+        lieu_naissance = self.e_lieu_naissance.get().strip()
+        sexe = self.var_sexe.get()
+        photo_path = self.photo_path_temp
 
         if not nom or not prenom:
             messagebox.showerror("Erreur", "Nom et prénom obligatoires.")
@@ -486,22 +603,52 @@ class App(tk.Toplevel):
         conn = db_connect()
         cur = conn.cursor()
         try:
-            cur.execute(
-                "INSERT INTO etudiants (matricule, nom, prenom, email, statut) VALUES (?, ?, ?, ?, ?)",
-                (matricule, nom, prenom, email if email else None, "actif"),
-            )
+            cur.execute("""
+                INSERT INTO etudiants 
+                (matricule, nom, prenom, email, telephone, adresse, date_naissance, lieu_naissance, sexe, photo_path, statut, date_inscription) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                matricule, nom, prenom, 
+                email if email else None, 
+                telephone if telephone else None,
+                adresse if adresse else None,
+                date_naissance if date_naissance else None,
+                lieu_naissance if lieu_naissance else None,
+                sexe,
+                photo_path,
+                "actif",
+                now_iso()
+            ))
             conn.commit()
-        except sqlite3.IntegrityError:
+        except sqlite3.IntegrityError as e:
             messagebox.showerror("Erreur", "Email déjà utilisé (ou conflit matricule).")
         finally:
             conn.close()
 
+        # Réinitialiser le formulaire
         self.e_nom.delete(0, tk.END)
         self.e_prenom.delete(0, tk.END)
         self.e_email.delete(0, tk.END)
+        self.e_telephone.delete(0, tk.END)
+        self.e_adresse.delete(0, tk.END)
+        self.e_date_naissance.delete(0, tk.END)
+        self.e_lieu_naissance.delete(0, tk.END)
+        self.var_sexe.set("M")
+        self.photo_path_temp = None
+        self.lbl_photo_path.config(text="Aucune photo")
 
         self.refresh_all()
         messagebox.showinfo("OK", f"Étudiant ajouté ({matricule}).")
+
+    def select_photo_student(self):
+        """Sélectionner une photo pour l'étudiant"""
+        path = filedialog.askopenfilename(
+            filetypes=[("Images", "*.jpg *.jpeg *.png *.bmp"), ("All Files", "*.*")]
+        )
+        if path:
+            self.photo_path_temp = path
+            filename = path.split("\\")[-1]
+            self.lbl_photo_path.config(text=filename, foreground="black")
 
     def refresh_etudiants_list(self):
         if not hasattr(self, "tree_etudiants"):
@@ -512,7 +659,7 @@ class App(tk.Toplevel):
         conn = db_connect()
         cur = conn.cursor()
         cur.execute("""
-            SELECT id, matricule, nom, prenom, COALESCE(email,''), COALESCE(statut,'')
+            SELECT id, matricule, nom, prenom, COALESCE(email,''), COALESCE(telephone,''), COALESCE(statut,'')
             FROM etudiants
             ORDER BY id DESC
         """)
@@ -531,25 +678,35 @@ class App(tk.Toplevel):
 
         w = tk.Toplevel(self)
         w.title("Fiche étudiant")
-        w.geometry("900x520")
+        w.geometry("1000x600")
         w.resizable(False, False)
 
         frm = ttk.Frame(w, padding=10)
         frm.pack(fill="both", expand=True)
 
-        box_id = ttk.LabelFrame(frm, text="Identité", padding=10)
+        box_id = ttk.LabelFrame(frm, text="Identité & Infos personnelles", padding=10)
         box_id.pack(fill="x")
 
         conn = db_connect()
         cur = conn.cursor()
-        cur.execute("SELECT matricule, nom, prenom, COALESCE(email,''), COALESCE(statut,'') FROM etudiants WHERE id=?", (etu_id,))
+        cur.execute("""
+            SELECT matricule, nom, prenom, COALESCE(email,''), COALESCE(telephone,''), COALESCE(adresse,''),
+                   COALESCE(date_naissance,''), COALESCE(lieu_naissance,''), COALESCE(sexe,''), COALESCE(statut,'')
+            FROM etudiants WHERE id=?
+        """, (etu_id,))
         etu = cur.fetchone()
 
         ttk.Label(box_id, text=f"Matricule : {etu[0]}").grid(row=0, column=0, sticky="w", padx=6, pady=2)
-        ttk.Label(box_id, text=f"Nom : {etu[1]}").grid(row=0, column=1, sticky="w", padx=6, pady=2)
-        ttk.Label(box_id, text=f"Prénom : {etu[2]}").grid(row=0, column=2, sticky="w", padx=6, pady=2)
+        ttk.Label(box_id, text=f"Nom : {etu[1]} {etu[2]}").grid(row=0, column=1, sticky="w", padx=6, pady=2)
+        ttk.Label(box_id, text=f"Statut : {etu[9]}").grid(row=0, column=2, sticky="w", padx=6, pady=2)
+        
         ttk.Label(box_id, text=f"Email : {etu[3]}").grid(row=1, column=0, sticky="w", padx=6, pady=2)
-        ttk.Label(box_id, text=f"Statut : {etu[4]}").grid(row=1, column=1, sticky="w", padx=6, pady=2)
+        ttk.Label(box_id, text=f"Téléphone : {etu[4]}").grid(row=1, column=1, sticky="w", padx=6, pady=2)
+        ttk.Label(box_id, text=f"Sexe : {etu[8]}").grid(row=1, column=2, sticky="w", padx=6, pady=2)
+        
+        ttk.Label(box_id, text=f"Adresse : {etu[5][:40]}...").grid(row=2, column=0, columnspan=3, sticky="w", padx=6, pady=2)
+        ttk.Label(box_id, text=f"Date naissance : {etu[6]}").grid(row=3, column=0, sticky="w", padx=6, pady=2)
+        ttk.Label(box_id, text=f"Lieu naissance : {etu[7]}").grid(row=3, column=1, columnspan=2, sticky="w", padx=6, pady=2)
 
         nb = ttk.Notebook(frm)
         nb.pack(fill="both", expand=True, pady=10)
