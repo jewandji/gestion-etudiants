@@ -15,6 +15,12 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.units import cm
 from openpyxl import Workbook
 
+# Graphics
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+import numpy as np
+
 
 # PATHS
 
@@ -2235,10 +2241,23 @@ class App(tk.Toplevel):
         self.lbl_kpis = ttk.Label(frm, text="", font=("Segoe UI", 11))
         self.lbl_kpis.pack(anchor="w", pady=(8, 10))
 
-        box = ttk.LabelFrame(frm, text="Top absences", padding=10)
+        # Frame pour les graphiques
+        charts_frm = ttk.Frame(frm)
+        charts_frm.pack(fill="both", expand=True, pady=10)
+
+        self.canvas_grades = tk.Canvas(charts_frm, bg="white", height=250)
+        self.canvas_absences = tk.Canvas(charts_frm, bg="white", height=250)
+        self.canvas_grades.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        self.canvas_absences.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
+        charts_frm.grid_rowconfigure(0, weight=1)
+        charts_frm.grid_columnconfigure(0, weight=1)
+        charts_frm.grid_columnconfigure(1, weight=1)
+
+        # Frame pour les statistiques
+        box = ttk.LabelFrame(frm, text="Top 5 étudiants avec le plus d'absences", padding=10)
         box.pack(fill="both", expand=True)
 
-        self.tree_top_abs = ttk.Treeview(box, columns=("matricule", "etudiant", "absences"), show="headings", height=12)
+        self.tree_top_abs = ttk.Treeview(box, columns=("matricule", "etudiant", "absences"), show="headings", height=8)
         for c, w in [("matricule", 180), ("etudiant", 360), ("absences", 120)]:
             self.tree_top_abs.heading(c, text=c)
             self.tree_top_abs.column(c, width=w, anchor="w")
@@ -2246,6 +2265,81 @@ class App(tk.Toplevel):
         self.tree_top_abs.pack(fill="both", expand=True)
 
         ttk.Button(frm, text="Rafraîchir", command=self.refresh_dashboard).pack(anchor="e", pady=(10, 0))
+
+    def create_grade_distribution_chart(self):
+        """Crée un graphique de distribution des mentions académiques"""
+        conn = db_connect()
+        cur = conn.cursor()
+        
+        # Récupérer les données de notes
+        cur.execute("SELECT note FROM notes WHERE note IS NOT NULL")
+        notes = [row[0] for row in cur.fetchall()]
+        conn.close()
+        
+        if not notes:
+            return None
+        
+        # Créer les catégories de mentions
+        mentions_count = {
+            "Excellente (≥18)": len([n for n in notes if n >= 18]),
+            "Très bien (≥16)": len([n for n in notes if 16 <= n < 18]),
+            "Bien (≥14)": len([n for n in notes if 14 <= n < 16]),
+            "Assez bien (≥12)": len([n for n in notes if 12 <= n < 14]),
+            "Passable (≥10)": len([n for n in notes if 10 <= n < 12]),
+            "Insuffisant (<10)": len([n for n in notes if n < 10]),
+        }
+        
+        fig = Figure(figsize=(5, 3.5), dpi=100)
+        ax = fig.add_subplot(111)
+        
+        mentions = list(mentions_count.keys())
+        counts = list(mentions_count.values())
+        colors = ['#2ecc71', '#27ae60', '#f39c12', '#e67e22', '#e74c3c', '#95a5a6']
+        
+        ax.bar(mentions, counts, color=colors, edgecolor='black', linewidth=0.5)
+        ax.set_ylabel('Nombre d\'étudiants', fontsize=10)
+        ax.set_title('Distribution des mentions académiques', fontsize=11, fontweight='bold')
+        ax.tick_params(axis='x', rotation=45, labelsize=8)
+        fig.tight_layout()
+        
+        return fig
+
+    def create_absences_distribution_chart(self):
+        """Crée un graphique de distribution des absences par niveau"""
+        conn = db_connect()
+        cur = conn.cursor()
+        
+        # Récupérer les absences par niveau
+        cur.execute("""
+            SELECT n.nom, COUNT(a.id) as nb_absences
+            FROM absences a
+            LEFT JOIN modules m ON m.id = a.module_id
+            LEFT JOIN niveaux n ON n.id = (
+                SELECT niveau_id FROM inscriptions WHERE etudiant_id = a.etudiant_id LIMIT 1
+            )
+            GROUP BY n.nom
+            ORDER BY nb_absences DESC
+            LIMIT 8
+        """)
+        data = cur.fetchall()
+        conn.close()
+        
+        if not data:
+            return None
+        
+        niveaux = [row[0] if row[0] else "Non assigné" for row in data]
+        absences = [row[1] for row in data]
+        
+        fig = Figure(figsize=(5, 3.5), dpi=100)
+        ax = fig.add_subplot(111)
+        
+        ax.barh(niveaux, absences, color='#e74c3c', edgecolor='black', linewidth=0.5)
+        ax.set_xlabel('Nombre d\'absences', fontsize=10)
+        ax.set_title('Absences par niveau', fontsize=11, fontweight='bold')
+        ax.tick_params(axis='y', labelsize=9)
+        fig.tight_layout()
+        
+        return fig
 
     def refresh_dashboard(self):
         if not hasattr(self, "lbl_kpis"):
@@ -2286,6 +2380,30 @@ class App(tk.Toplevel):
             self.tree_top_abs.delete(row)
         for m, e, n in top_abs:
             self.tree_top_abs.insert("", "end", values=(m, e, n))
+
+        # Refresh charts
+        try:
+            # Clear previous canvases
+            for widget in self.canvas_grades.winfo_children():
+                widget.destroy()
+            for widget in self.canvas_absences.winfo_children():
+                widget.destroy()
+
+            # Grade distribution chart
+            fig_grades = self.create_grade_distribution_chart()
+            if fig_grades:
+                canvas_grades = FigureCanvasTkAgg(fig_grades, master=self.canvas_grades)
+                canvas_grades.draw()
+                canvas_grades.get_tk_widget().pack(fill="both", expand=True)
+
+            # Absences distribution chart
+            fig_absences = self.create_absences_distribution_chart()
+            if fig_absences:
+                canvas_absences = FigureCanvasTkAgg(fig_absences, master=self.canvas_absences)
+                canvas_absences.draw()
+                canvas_absences.get_tk_widget().pack(fill="both", expand=True)
+        except Exception as e:
+            print(f"Erreur lors du rendu des graphiques: {e}")
 
     # DOCUMENTS
 
