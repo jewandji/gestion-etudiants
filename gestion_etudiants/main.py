@@ -515,6 +515,7 @@ class App(tk.Toplevel):
         self.tab_calendrier = ttk.Frame(self.tabs)
         self.tab_dashboard = ttk.Frame(self.tabs)
         self.tab_documents = ttk.Frame(self.tabs)
+        self.tab_users = ttk.Frame(self.tabs)
 
         self.tabs.add(self.tab_etudiants, text="Étudiants")
         self.tabs.add(self.tab_academique, text="Filières & Niveaux")
@@ -525,6 +526,7 @@ class App(tk.Toplevel):
         self.tabs.add(self.tab_calendrier, text="Calendrier")
         self.tabs.add(self.tab_dashboard, text="Dashboard")
         self.tabs.add(self.tab_documents, text="Documents")
+        self.tabs.add(self.tab_users, text="Gestion utilisateurs")
 
         self.build_etudiants_tab()
         self.build_academique_tab()
@@ -535,6 +537,7 @@ class App(tk.Toplevel):
         self.build_calendrier_tab()
         self.build_dashboard_tab()
         self.build_documents_tab()
+        self.build_users_tab()
 
         self.refresh_all()
 
@@ -559,6 +562,7 @@ class App(tk.Toplevel):
         self.refresh_calendrier()
         self.refresh_dashboard()
         self.refresh_documents_lists()
+        self.refresh_users_list()
 
     # ETUDIANTS
 
@@ -2543,6 +2547,221 @@ class App(tk.Toplevel):
             "absences"
         )
         messagebox.showinfo("OK", "Export absences Excel terminé.")
+
+    # GESTION UTILISATEURS
+
+    def build_users_tab(self):
+        """Construire l'interface de gestion des utilisateurs"""
+        frm = ttk.Frame(self.tab_users, padding=10)
+        frm.pack(fill="both", expand=True)
+
+        ttk.Label(frm, text="Gestion des utilisateurs", font=("Segoe UI", 14, "bold")).pack(anchor="w", pady=(0, 10))
+
+        # Section ajout/édition
+        left = ttk.LabelFrame(frm, text="Ajouter/Modifier utilisateur", padding=10)
+        left.pack(side="left", fill="y", padx=(0, 10))
+
+        ttk.Label(left, text="Nom d'utilisateur *").grid(row=0, column=0, sticky="w", pady=4)
+        ttk.Label(left, text="Mot de passe *").grid(row=1, column=0, sticky="w", pady=4)
+        ttk.Label(left, text="Rôle *").grid(row=2, column=0, sticky="w", pady=4)
+        ttk.Label(left, text="Nom").grid(row=3, column=0, sticky="w", pady=4)
+        ttk.Label(left, text="Prénom").grid(row=4, column=0, sticky="w", pady=4)
+        ttk.Label(left, text="Email").grid(row=5, column=0, sticky="w", pady=4)
+
+        self.e_user_username = ttk.Entry(left, width=28)
+        self.e_user_password = ttk.Entry(left, width=28, show="*")
+        self.var_user_role = tk.StringVar(value="Secrétariat")
+        self.cb_user_role = ttk.Combobox(left, textvariable=self.var_user_role, 
+                                         values=["ADMIN", "Enseignant", "Secrétariat"], 
+                                         width=25, state="readonly")
+        self.e_user_nom = ttk.Entry(left, width=28)
+        self.e_user_prenom = ttk.Entry(left, width=28)
+        self.e_user_email = ttk.Entry(left, width=28)
+
+        self.e_user_username.grid(row=0, column=1, pady=4)
+        self.e_user_password.grid(row=1, column=1, pady=4)
+        self.cb_user_role.grid(row=2, column=1, pady=4)
+        self.e_user_nom.grid(row=3, column=1, pady=4)
+        self.e_user_prenom.grid(row=4, column=1, pady=4)
+        self.e_user_email.grid(row=5, column=1, pady=4)
+
+        ttk.Button(left, text="Ajouter", command=self.add_user).grid(row=6, column=1, sticky="e", pady=(10, 0))
+
+        ttk.Separator(left, orient="horizontal").grid(row=7, column=0, columnspan=2, sticky="ew", pady=12)
+
+        ttk.Button(left, text="Réinitialiser mot de passe", command=self.reset_user_password).grid(row=8, column=0, columnspan=2, sticky="ew", pady=4)
+        ttk.Button(left, text="Désactiver", command=self.toggle_user_active).grid(row=9, column=0, columnspan=2, sticky="ew", pady=4)
+
+        # Section liste des utilisateurs
+        right = ttk.LabelFrame(frm, text="Liste des utilisateurs (double-clic = modifier)", padding=10)
+        right.pack(side="left", fill="both", expand=True)
+
+        cols = ("id", "username", "role", "nom_prenom", "email", "statut")
+        self.tree_users = ttk.Treeview(right, columns=cols, show="headings", height=22)
+        for c in cols:
+            self.tree_users.heading(c, text=c)
+            if c == "id":
+                self.tree_users.column(c, width=50, anchor="center")
+            elif c in ("email", "role"):
+                self.tree_users.column(c, width=140, anchor="w")
+            else:
+                self.tree_users.column(c, width=120, anchor="w")
+
+        self.tree_users.pack(fill="both", expand=True)
+        self.tree_users.bind("<Double-1>", self.load_user_to_edit)
+
+    def add_user(self):
+        """Ajouter un nouvel utilisateur"""
+        username = self.e_user_username.get().strip()
+        password = self.e_user_password.get().strip()
+        role = self.var_user_role.get()
+        nom = self.e_user_nom.get().strip()
+        prenom = self.e_user_prenom.get().strip()
+        email = self.e_user_email.get().strip()
+
+        if not username or not password:
+            messagebox.showerror("Erreur", "Nom d'utilisateur et mot de passe obligatoires.")
+            return
+
+        password_hash = hash_password(password)
+
+        conn = db_connect()
+        cur = conn.cursor()
+        try:
+            cur.execute("""
+                INSERT INTO users (username, password_hash, role, nom, prenom, email, date_creation, actif)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                username, password_hash, role,
+                nom if nom else None,
+                prenom if prenom else None,
+                email if email else None,
+                now_iso(),
+                1
+            ))
+            conn.commit()
+            messagebox.showinfo("OK", "Utilisateur ajouté.")
+        except sqlite3.IntegrityError:
+            messagebox.showerror("Erreur", "Nom d'utilisateur ou email déjà utilisé.")
+        finally:
+            conn.close()
+
+        # Réinitialiser le formulaire
+        self.e_user_username.delete(0, tk.END)
+        self.e_user_password.delete(0, tk.END)
+        self.e_user_nom.delete(0, tk.END)
+        self.e_user_prenom.delete(0, tk.END)
+        self.e_user_email.delete(0, tk.END)
+        self.var_user_role.set("Secrétariat")
+        self.e_user_username.focus()
+
+        self.refresh_users_list()
+
+    def load_user_to_edit(self, event=None):
+        """Charger les données d'un utilisateur dans le formulaire pour édition"""
+        sel = self.tree_users.selection()
+        if not sel:
+            return
+        
+        values = self.tree_users.item(sel[0], "values")
+        user_id = int(values[0])
+
+        conn = db_connect()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT username, role, nom, prenom, email FROM users WHERE id=?
+        """, (user_id,))
+        user = cur.fetchone()
+        conn.close()
+
+        if user:
+            self.e_user_username.delete(0, tk.END)
+            self.e_user_username.insert(0, user[0])
+            self.e_user_username.config(state="readonly")
+            
+            self.var_user_role.set(user[1])
+            
+            self.e_user_nom.delete(0, tk.END)
+            self.e_user_nom.insert(0, user[2] or "")
+            
+            self.e_user_prenom.delete(0, tk.END)
+            self.e_user_prenom.insert(0, user[3] or "")
+            
+            self.e_user_email.delete(0, tk.END)
+            self.e_user_email.insert(0, user[4] or "")
+
+            self.current_edit_user_id = user_id
+
+    def reset_user_password(self):
+        """Réinitialiser le mot de passe d'un utilisateur"""
+        if not hasattr(self, "current_edit_user_id"):
+            messagebox.showerror("Erreur", "Sélectionnez d'abord un utilisateur.")
+            return
+
+        new_password = "Password123"
+        password_hash = hash_password(new_password)
+
+        conn = db_connect()
+        cur = conn.cursor()
+        try:
+            cur.execute("UPDATE users SET password_hash=? WHERE id=?", (password_hash, self.current_edit_user_id))
+            conn.commit()
+            messagebox.showinfo("OK", f"Mot de passe réinitialisé à: {new_password}")
+        finally:
+            conn.close()
+
+        self.refresh_users_list()
+
+    def toggle_user_active(self):
+        """Activer/Désactiver un utilisateur"""
+        if not hasattr(self, "current_edit_user_id"):
+            messagebox.showerror("Erreur", "Sélectionnez d'abord un utilisateur.")
+            return
+
+        if not messagebox.askyesno("Confirmation", "Désactiver cet utilisateur ?"):
+            return
+
+        conn = db_connect()
+        cur = conn.cursor()
+        cur.execute("UPDATE users SET actif=0 WHERE id=?", (self.current_edit_user_id,))
+        conn.commit()
+        conn.close()
+
+        messagebox.showinfo("OK", "Utilisateur désactivé.")
+        self.refresh_users_list()
+
+    def refresh_users_list(self):
+        """Rafraîchir la liste des utilisateurs"""
+        if not hasattr(self, "tree_users"):
+            return
+
+        for row in self.tree_users.get_children():
+            self.tree_users.delete(row)
+
+        conn = db_connect()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, username, role, COALESCE(nom,'') || ' ' || COALESCE(prenom,''), 
+                   COALESCE(email,''), CASE actif WHEN 1 THEN 'Actif' ELSE 'Inactif' END
+            FROM users
+            ORDER BY id DESC
+        """)
+        rows = cur.fetchall()
+        conn.close()
+
+        for r in rows:
+            self.tree_users.insert("", "end", values=r)
+
+        # Réinitialiser le formulaire
+        self.e_user_username.config(state="normal")
+        self.e_user_username.delete(0, tk.END)
+        self.e_user_password.delete(0, tk.END)
+        self.e_user_nom.delete(0, tk.END)
+        self.e_user_prenom.delete(0, tk.END)
+        self.e_user_email.delete(0, tk.END)
+        self.var_user_role.set("Secrétariat")
+        if hasattr(self, "current_edit_user_id"):
+            del self.current_edit_user_id
 
 
 # LOGIN WINDOW
