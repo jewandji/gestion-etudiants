@@ -559,11 +559,15 @@ class App(tk.Toplevel):
         self.root = root
 
         self.title("Gestion des étudiants")
-        self.geometry("1100x700")
-        self.resizable(False, False)
+        self.geometry("1400x800")
+        self.resizable(True, True)
         
         # Fermer l'application complètement quand on ferme cette fenêtre
         self.protocol("WM_DELETE_WINDOW", self.close_app)
+        
+        # Permettre le plein écran avec F11
+        self.bind("<F11>", self.toggle_fullscreen)
+        self.fullscreen_state = False
 
         self.tabs = ttk.Notebook(self)
         self.tabs.pack(fill="both", expand=True, padx=10, pady=10)
@@ -633,6 +637,11 @@ class App(tk.Toplevel):
         self.refresh_documents_lists()
         self.refresh_users_list()
 
+    def toggle_fullscreen(self, event=None):
+        """Toggle fullscreen mode with F11"""
+        self.fullscreen_state = not self.fullscreen_state
+        self.attributes('-fullscreen', self.fullscreen_state)
+
     # ETUDIANTS
 
     def build_etudiants_tab(self):
@@ -640,7 +649,7 @@ class App(tk.Toplevel):
         frm.pack(fill="both", expand=True)
 
         left = ttk.LabelFrame(frm, text="Ajouter un étudiant", padding=10)
-        left.pack(side="left", fill="y", padx=(0, 10))
+        left.pack(side="left", fill="both", expand=False, padx=(0, 10))
 
         # INFORMATIONS PERSONNELLES
         ttk.Label(left, text="Nom *").grid(row=0, column=0, sticky="w", pady=4)
@@ -884,8 +893,8 @@ class App(tk.Toplevel):
 
         w = tk.Toplevel(self)
         w.title("Fiche étudiant")
-        w.geometry("1000x600")
-        w.resizable(False, False)
+        w.geometry("1000x700")
+        w.resizable(True, True)
 
         frm = ttk.Frame(w, padding=10)
         frm.pack(fill="both", expand=True)
@@ -2860,7 +2869,7 @@ class Login(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
         self.title("Connexion")
-        self.geometry("320x180")
+        self.geometry("400x220")
         self.resizable(False, False)
         
         # Fermer l'application si on ferme la fenêtre de connexion
