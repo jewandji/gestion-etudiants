@@ -340,6 +340,24 @@ def migrate_database():
     finally:
         conn.close()
 
+    # Vérifier la table des enseignements pour ajouter la colonne 'groupe' si nécessaire
+    conn = db_connect()
+    cur = conn.cursor()
+    try:
+        cur.execute("PRAGMA table_info(enseignements)")
+        existing = {row[1] for row in cur.fetchall()}
+        if 'groupe' not in existing:
+            try:
+                cur.execute("ALTER TABLE enseignements ADD COLUMN groupe TEXT")
+                conn.commit()
+                print("✓ Colonne 'groupe' ajoutée à la table enseignements")
+            except Exception as e:
+                print(f"Impossible d'ajouter la colonne 'groupe' : {e}")
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
 
 def log_action(conn, user_id: int, action: str, table_affectee: str, enregistrement_id: int = None, details: str = None):
     """Enregistre une action dans la table logs pour l'audit"""
@@ -2072,17 +2090,20 @@ class App(tk.Toplevel):
         ttk.Label(left, text="Affecter un module").grid(row=5, column=0, columnspan=2, sticky="w")
         ttk.Label(left, text="Enseignant").grid(row=6, column=0, sticky="w", pady=4)
         ttk.Label(left, text="Module").grid(row=7, column=0, sticky="w", pady=4)
-        ttk.Label(left, text="Année").grid(row=8, column=0, sticky="w", pady=4)
+        ttk.Label(left, text="Groupe (Filière+Niveau+Spécialité)").grid(row=8, column=0, sticky="w", pady=4)
+        ttk.Label(left, text="Année").grid(row=9, column=0, sticky="w", pady=4)
 
         self.cb_aff_ens = ttk.Combobox(left, width=40, state="readonly")
         self.cb_aff_module = ttk.Combobox(left, width=40, state="readonly")
+        self.e_aff_groupe = ttk.Entry(left, width=40)
         self.e_aff_annee = ttk.Entry(left, width=18)
 
         self.cb_aff_ens.grid(row=6, column=1, pady=4, sticky="w")
         self.cb_aff_module.grid(row=7, column=1, pady=4, sticky="w")
-        self.e_aff_annee.grid(row=8, column=1, pady=4, sticky="w")
+        self.e_aff_groupe.grid(row=8, column=1, pady=4, sticky="w")
+        self.e_aff_annee.grid(row=9, column=1, pady=4, sticky="w")
 
-        ttk.Button(left, text="Affecter", command=self.add_affectation).grid(row=9, column=1, sticky="e", pady=6)
+        ttk.Button(left, text="Affecter", command=self.add_affectation).grid(row=10, column=1, sticky="e", pady=6)
 
         right = ttk.LabelFrame(frm, text="Enseignants & affectations", padding=10)
         right.pack(side="left", fill="both", expand=True)
@@ -2095,13 +2116,21 @@ class App(tk.Toplevel):
         self.tree_ens.column("id", width=60, anchor="center")
         self.tree_ens.pack(fill="x", expand=False)
 
-        cols2 = ("id", "enseignant", "module", "annee")
+        cols2 = ("id", "enseignant", "module", "groupe", "annee")
         self.tree_aff = ttk.Treeview(right, columns=cols2, show="headings", height=10)
         for c in cols2:
             self.tree_aff.heading(c, text=c)
-            self.tree_aff.column(c, width=260, anchor="w")
+            self.tree_aff.column(c, width=220, anchor="w")
         self.tree_aff.column("id", width=60, anchor="center")
         self.tree_aff.pack(fill="both", expand=True, pady=(10, 0))
+
+        # Buttons for managing enseignants/affectations
+        btn_frame = ttk.Frame(right)
+        btn_frame.pack(fill="x", pady=(8,0))
+        ttk.Button(btn_frame, text="Modifier enseignant", command=self.edit_enseignant).pack(side="left", padx=4)
+        ttk.Button(btn_frame, text="Supprimer enseignant", command=self.delete_enseignant).pack(side="left", padx=4)
+        ttk.Button(btn_frame, text="Modifier affectation", command=self.load_affectation_to_edit).pack(side="right", padx=4)
+        ttk.Button(btn_frame, text="Supprimer affectation", command=self.delete_affectation).pack(side="right", padx=4)
 
     def add_enseignant(self):
         nom = self.e_ens_nom.get().strip()
@@ -2127,9 +2156,103 @@ class App(tk.Toplevel):
         self.e_ens_mail.delete(0, tk.END)
         self.refresh_enseignants()
 
+    def edit_enseignant(self):
+        sel = self.tree_ens.selection()
+        if not sel:
+            messagebox.showerror("Erreur", "Sélectionnez d'abord un enseignant.")
+            return
+        values = self.tree_ens.item(sel[0], 'values')
+        ens_id = int(values[0])
+
+        conn = db_connect()
+        cur = conn.cursor()
+        cur.execute("SELECT nom, prenom, email FROM enseignants WHERE id=?", (ens_id,))
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            messagebox.showerror("Erreur", "Enseignant introuvable.")
+            return
+
+        self.e_ens_nom.delete(0, tk.END)
+        self.e_ens_nom.insert(0, row[0])
+        self.e_ens_pre.delete(0, tk.END)
+        self.e_ens_pre.insert(0, row[1])
+        self.e_ens_mail.delete(0, tk.END)
+        self.e_ens_mail.insert(0, row[2] or "")
+        self.current_edit_enseignant_id = ens_id
+
+    def delete_enseignant(self):
+        sel = self.tree_ens.selection()
+        if not sel:
+            messagebox.showerror("Erreur", "Sélectionnez d'abord un enseignant.")
+            return
+        values = self.tree_ens.item(sel[0], 'values')
+        ens_id = int(values[0])
+        if not messagebox.askyesno("Confirmation", "Supprimer cet enseignant et toutes ses affectations ?"):
+            return
+        conn = db_connect()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM enseignants WHERE id=?", (ens_id,))
+        conn.commit()
+        conn.close()
+        self.refresh_enseignants()
+
+    def delete_affectation(self):
+        sel = self.tree_aff.selection()
+        if not sel:
+            messagebox.showerror("Erreur", "Sélectionnez d'abord une affectation.")
+            return
+        values = self.tree_aff.item(sel[0], 'values')
+        aff_id = int(values[0])
+        if not messagebox.askyesno("Confirmation", "Supprimer cette affectation ?"):
+            return
+        conn = db_connect()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM enseignements WHERE id=?", (aff_id,))
+        conn.commit()
+        conn.close()
+        self.refresh_enseignants()
+
+    def load_affectation_to_edit(self):
+        sel = self.tree_aff.selection()
+        if not sel:
+            messagebox.showerror("Erreur", "Sélectionnez d'abord une affectation.")
+            return
+        values = self.tree_aff.item(sel[0], 'values')
+        aff_id = int(values[0])
+
+        conn = db_connect()
+        cur = conn.cursor()
+        cur.execute("SELECT enseignant_id, module_id, groupe, annee_academique FROM enseignements WHERE id=?", (aff_id,))
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            messagebox.showerror("Erreur", "Affectation introuvable.")
+            return
+
+        ens_id, mod_id, groupe, annee = row
+        # set comboboxes to corresponding text values
+        # find matching display strings
+        for v in self.cb_aff_ens['values']:
+            if v.startswith(f"{ens_id} -"):
+                self.cb_aff_ens.set(v)
+                break
+        for v in self.cb_aff_module['values']:
+            if v.startswith(f"{mod_id} -"):
+                self.cb_aff_module.set(v)
+                break
+        self.e_aff_groupe.delete(0, tk.END)
+        self.e_aff_groupe.insert(0, groupe or "")
+        self.e_aff_annee.delete(0, tk.END)
+        self.e_aff_annee.insert(0, annee or "")
+
+        self.current_edit_affectation_id = aff_id
+
+
     def add_affectation(self):
         ens_id = self.parse_id_from_combo(self.cb_aff_ens.get())
         mod_id = self.parse_id_from_combo(self.cb_aff_module.get())
+        groupe = self.e_aff_groupe.get().strip() or None
         annee = self.e_aff_annee.get().strip() or None
 
         if not ens_id or not mod_id:
@@ -2139,10 +2262,17 @@ class App(tk.Toplevel):
         conn = db_connect()
         cur = conn.cursor()
         try:
-            cur.execute("""
-                INSERT INTO enseignements (enseignant_id, module_id, annee_academique)
-                VALUES (?, ?, ?)
-            """, (ens_id, mod_id, annee))
+            # Si on est en édition d'une affectation existante, mettre à jour
+            if hasattr(self, 'current_edit_affectation_id'):
+                cur.execute("""
+                    UPDATE enseignements SET enseignant_id=?, module_id=?, groupe=?, annee_academique=? WHERE id=?
+                """, (ens_id, mod_id, groupe, annee, self.current_edit_affectation_id))
+                del self.current_edit_affectation_id
+            else:
+                cur.execute("""
+                    INSERT INTO enseignements (enseignant_id, module_id, groupe, annee_academique)
+                    VALUES (?, ?, ?, ?)
+                """, (ens_id, mod_id, groupe, annee))
             conn.commit()
         except sqlite3.IntegrityError:
             messagebox.showerror("Erreur", "Affectation déjà existante.")
@@ -2176,6 +2306,7 @@ class App(tk.Toplevel):
             SELECT en.id,
                    e.nom || ' ' || e.prenom,
                    m.code || ' - ' || m.nom,
+                   COALESCE(en.groupe,''),
                    COALESCE(en.annee_academique,'')
             FROM enseignements en
             JOIN enseignants e ON e.id=en.enseignant_id
@@ -2186,6 +2317,7 @@ class App(tk.Toplevel):
         conn.close()
 
         for row in aff:
+            # row now: (id, enseignant, module, groupe, annee)
             self.tree_aff.insert("", "end", values=row)
 
     # CALENDRIER
@@ -2685,11 +2817,12 @@ class App(tk.Toplevel):
         self.e_user_email.grid(row=5, column=1, pady=4)
 
         ttk.Button(left, text="Ajouter", command=self.add_user).grid(row=6, column=1, sticky="e", pady=(10, 0))
+        ttk.Button(left, text="Modifier", command=self.update_user).grid(row=6, column=0, sticky="w", pady=(10, 0))
 
         ttk.Separator(left, orient="horizontal").grid(row=7, column=0, columnspan=2, sticky="ew", pady=12)
 
         ttk.Button(left, text="Réinitialiser mot de passe", command=self.reset_user_password).grid(row=8, column=0, columnspan=2, sticky="ew", pady=4)
-        ttk.Button(left, text="Désactiver", command=self.toggle_user_active).grid(row=9, column=0, columnspan=2, sticky="ew", pady=4)
+        ttk.Button(left, text="Activer/Désactiver", command=self.toggle_user_active).grid(row=9, column=0, columnspan=2, sticky="ew", pady=4)
 
         # Section liste des utilisateurs
         right = ttk.LabelFrame(frm, text="Liste des utilisateurs (double-clic = modifier)", padding=10)
@@ -2776,7 +2909,6 @@ class App(tk.Toplevel):
         if user:
             self.e_user_username.delete(0, tk.END)
             self.e_user_username.insert(0, user[0])
-            self.e_user_username.config(state="readonly")
             
             self.var_user_role.set(user[1])
             
@@ -2816,17 +2948,60 @@ class App(tk.Toplevel):
         if not hasattr(self, "current_edit_user_id"):
             messagebox.showerror("Erreur", "Sélectionnez d'abord un utilisateur.")
             return
-
-        if not messagebox.askyesno("Confirmation", "Désactiver cet utilisateur ?"):
-            return
-
+        # Récupérer statut actuel
         conn = db_connect()
         cur = conn.cursor()
-        cur.execute("UPDATE users SET actif=0 WHERE id=?", (self.current_edit_user_id,))
+        cur.execute("SELECT actif FROM users WHERE id=?", (self.current_edit_user_id,))
+        row = cur.fetchone()
+        if not row:
+            conn.close()
+            messagebox.showerror("Erreur", "Utilisateur introuvable.")
+            return
+        current_actif = row[0]
+        new_actif = 0 if current_actif == 1 else 1
+
+        action = "désactiver" if new_actif == 0 else "activer"
+        if not messagebox.askyesno("Confirmation", f"{action.capitalize()} cet utilisateur ?"):
+            conn.close()
+            return
+
+        cur.execute("UPDATE users SET actif=? WHERE id=?", (new_actif, self.current_edit_user_id))
         conn.commit()
         conn.close()
 
-        messagebox.showinfo("OK", "Utilisateur désactivé.")
+        messagebox.showinfo("OK", f"Utilisateur {'activé' if new_actif==1 else 'désactivé'}.")
+        self.refresh_users_list()
+
+    def update_user(self):
+        """Valider les modifications d'un utilisateur sélectionné"""
+        if not hasattr(self, "current_edit_user_id"):
+            messagebox.showerror("Erreur", "Sélectionnez d'abord un utilisateur.")
+            return
+
+        username = self.e_user_username.get().strip()
+        password = self.e_user_password.get().strip()
+        role = self.var_user_role.get()
+        nom = self.e_user_nom.get().strip() or None
+        prenom = self.e_user_prenom.get().strip() or None
+        email = self.e_user_email.get().strip() or None
+
+        conn = db_connect()
+        cur = conn.cursor()
+        try:
+            if password:
+                password_hash = hash_password(password)
+                cur.execute("UPDATE users SET username=?, password_hash=?, role=?, nom=?, prenom=?, email=? WHERE id=?",
+                            (username, password_hash, role, nom, prenom, email, self.current_edit_user_id))
+            else:
+                cur.execute("UPDATE users SET username=?, role=?, nom=?, prenom=?, email=? WHERE id=?",
+                            (username, role, nom, prenom, email, self.current_edit_user_id))
+            conn.commit()
+            messagebox.showinfo("OK", "Utilisateur mis à jour.")
+        except sqlite3.IntegrityError:
+            messagebox.showerror("Erreur", "Nom d'utilisateur ou email déjà utilisé.")
+        finally:
+            conn.close()
+
         self.refresh_users_list()
 
     def refresh_users_list(self):
