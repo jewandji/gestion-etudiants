@@ -148,9 +148,7 @@ L'application est structurée en **10 onglets**, chacun regroupant des actions c
 - Export de la liste des étudiants en CSV et Excel
 
 <img width="951" height="500" alt="image" src="https://github.com/user-attachments/assets/c7094730-6601-4ec3-81f7-d35be22fdc8a" />
-<img width="951" height="500" alt="image" src="https://github.com/user-attachments/assets/c7094730-6601-4ec3-81f7-d35be22fdc8a" />
 
-<img width="951" height="497" alt="image" src="https://github.com/user-attachments/assets/14a47dc5-5485-4251-939d-6f8ed8c80903" />
 <img width="951" height="497" alt="image" src="https://github.com/user-attachments/assets/14a47dc5-5485-4251-939d-6f8ed8c80903" />
 
 
@@ -162,7 +160,6 @@ L'application est structurée en **10 onglets**, chacun regroupant des actions c
 - Alimentation des listes déroulantes utilisées dans les autres onglets
 
 <img width="855" height="448" alt="image" src="https://github.com/user-attachments/assets/eeffa33a-3482-4559-9ce8-4b7483d2d4cb" />
-<img width="855" height="448" alt="image" src="https://github.com/user-attachments/assets/eeffa33a-3482-4559-9ce8-4b7483d2d4cb" />
 
 
 ### 3. Onglet Inscriptions
@@ -170,7 +167,6 @@ L'application est structurée en **10 onglets**, chacun regroupant des actions c
 - Création d'une inscription via sélection d'étudiant, filière, niveau et année académique
 - Affichage de l'historique des inscriptions dans un tableau
 
-<img width="950" height="500" alt="image" src="https://github.com/user-attachments/assets/ace35e1e-1de4-4303-9ee9-e708cf035451" />
 <img width="950" height="500" alt="image" src="https://github.com/user-attachments/assets/ace35e1e-1de4-4303-9ee9-e708cf035451" />
 
 
@@ -190,7 +186,6 @@ L'application est structurée en **10 onglets**, chacun regroupant des actions c
 - **Traçabilité complète** : table `notes_audit` enregistre INSERT/UPDATE/DELETE avec date et utilisateur
 
 <img width="950" height="499" alt="image" src="https://github.com/user-attachments/assets/5c2ffa73-5e1a-465b-ae04-b2642f76f7f6" />
-<img width="950" height="499" alt="image" src="https://github.com/user-attachments/assets/5c2ffa73-5e1a-465b-ae04-b2642f76f7f6" />
 
 
 ### 5. Onglet Absences
@@ -203,7 +198,6 @@ L'application est structurée en **10 onglets**, chacun regroupant des actions c
 - Système d'alerte : liste des étudiants dépassant un seuil d'absences
 
 <img width="945" height="631" alt="image" src="https://github.com/user-attachments/assets/4a356806-dc34-4928-9819-2f95fb691ea1" />
-<img width="945" height="631" alt="image" src="https://github.com/user-attachments/assets/4a356806-dc34-4928-9819-2f95fb691ea1" />
 
 
 ### 6. Onglet Enseignants
@@ -213,9 +207,7 @@ L'application est structurée en **10 onglets**, chacun regroupant des actions c
 - Affichage des enseignants et affectations dans deux tableaux
 
 <img width="950" height="499" alt="image" src="https://github.com/user-attachments/assets/1a8ca908-33d3-4a4d-bdeb-85efc210786b" />
-<img width="950" height="499" alt="image" src="https://github.com/user-attachments/assets/1a8ca908-33d3-4a4d-bdeb-85efc210786b" />
 
-<img width="950" height="499" alt="image" src="https://github.com/user-attachments/assets/55d6428b-a5f4-465c-8441-e2c409e910ff" />
 <img width="950" height="499" alt="image" src="https://github.com/user-attachments/assets/55d6428b-a5f4-465c-8441-e2c409e910ff" />
 
 
@@ -225,7 +217,6 @@ L'application est structurée en **10 onglets**, chacun regroupant des actions c
 - Ajout de périodes rattachées à un semestre
 - Affichage des semestres et périodes dans deux tableaux
 
-<img width="846" height="443" alt="image" src="https://github.com/user-attachments/assets/9628f883-f355-4633-9211-ec15f0cc67c5" />
 <img width="846" height="443" alt="image" src="https://github.com/user-attachments/assets/9628f883-f355-4633-9211-ec15f0cc67c5" />
 
 
@@ -237,7 +228,6 @@ L'application est structurée en **10 onglets**, chacun regroupant des actions c
 - Bouton de rafraîchissement
   
 <img width="950" height="499" alt="image" src="https://github.com/user-attachments/assets/48c0db8e-bd8b-4459-b5b3-8a3cacc4dcee" />
-<img width="950" height="499" alt="image" src="https://github.com/user-attachments/assets/48c0db8e-bd8b-4459-b5b3-8a3cacc4dcee" />
 
 
 ### 9. Onglet Documents
@@ -247,16 +237,13 @@ L'application est structurée en **10 onglets**, chacun regroupant des actions c
 - Absences (liste complète)
 
 <img width="852" height="448" alt="image" src="https://github.com/user-attachments/assets/bafcbd39-427c-4237-a9e6-3c43f41b8e87" />
-<img width="852" height="448" alt="image" src="https://github.com/user-attachments/assets/bafcbd39-427c-4237-a9e6-3c43f41b8e87" />
 
 #### Génération PDF
 - Relevé de notes d'un étudiant avec moyenne générale pondérée
 - Attestation de scolarité pour une année académique donnée
 
 <img width="693" height="364" alt="image" src="https://github.com/user-attachments/assets/b1002c22-90f2-40c4-8129-fc0baacd80b8" />
-<img width="693" height="364" alt="image" src="https://github.com/user-attachments/assets/b1002c22-90f2-40c4-8129-fc0baacd80b8" />
 
-<img width="676" height="421" alt="image" src="https://github.com/user-attachments/assets/6938d832-9726-4db1-a10e-73849c0bba22" />
 <img width="676" height="421" alt="image" src="https://github.com/user-attachments/assets/6938d832-9726-4db1-a10e-73849c0bba22" />
 
 
@@ -269,7 +256,6 @@ L'application est structurée en **10 onglets**, chacun regroupant des actions c
 - Réitialisation mot de passe
 - Activation/Désactivation de l'accès d'un utilisateur
 
-<img width="748" height="423" alt="image" src="https://github.com/user-attachments/assets/73f95348-5a6b-4349-92ab-1a90c6b0cd98" />
 <img width="748" height="423" alt="image" src="https://github.com/user-attachments/assets/73f95348-5a6b-4349-92ab-1a90c6b0cd98" />
 
 ---
