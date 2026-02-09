@@ -136,81 +136,81 @@ L'application est structurée en **9 onglets**, chacun regroupant des actions ci
 
 ### 1. Onglet Étudiants
 
-- ✅ Ajout d'un étudiant avec : nom, prénom, email
-- ✅ Génération automatique d'un matricule unique (format ETU + lettres + compteur)
-- ✅ Affichage de la liste des étudiants dans un tableau (Treeview)
-- ✅ Ouverture d'une fiche étudiant au double-clic, contenant :
+- Ajout d'un étudiant avec : nom, prénom, email
+- Génération automatique d'un matricule unique (format ETU + lettres + compteur)
+- Affichage de la liste des étudiants dans un tableau (Treeview)
+- Ouverture d'une fiche étudiant au double-clic, contenant :
   - Identité (matricule, nom, prénom, email, statut)
   - Historique des inscriptions
   - Notes
   - Absences
-- ✅ Import CSV d'étudiants
-- ✅ Export de la liste des étudiants en CSV et Excel
+- Import CSV d'étudiants
+- Export de la liste des étudiants en CSV et Excel
 
 ### 2. Onglet Filières & Niveaux
 
-- ✅ Ajout de filières (code, nom) avec contrôle d'unicité du code
-- ✅ Ajout de niveaux (code, nom, ordre) avec contrôle du champ ordre (entier)
-- ✅ Affichage des listes filières/niveaux
-- ✅ Alimentation des listes déroulantes utilisées dans les autres onglets
+- Ajout de filières (code, nom) avec contrôle d'unicité du code
+- Ajout de niveaux (code, nom, ordre) avec contrôle du champ ordre (entier)
+- Affichage des listes filières/niveaux
+- Alimentation des listes déroulantes utilisées dans les autres onglets
 
 ### 3. Onglet Inscriptions
 
-- ✅ Création d'une inscription via sélection d'étudiant, filière, niveau et année académique
-- ✅ Affichage de l'historique des inscriptions dans un tableau
+- Création d'une inscription via sélection d'étudiant, filière, niveau et année académique
+- Affichage de l'historique des inscriptions dans un tableau
 
 ### 4. Onglet Modules & Notes
 
 #### Modules
-- ✅ Ajout d'un module : code, nom, coefficient, crédits, filière, niveau
-- ✅ Affichage de la liste des modules
-- ✅ Alimentation des listes déroulantes
+- Ajout d'un module : code, nom, coefficient, crédits, filière, niveau
+- Affichage de la liste des modules
+- Alimentation des listes déroulantes
 
 #### Notes
-- ✅ Ajout d'une note avec contrôle (0 à 20)
-- ✅ Type d'évaluation et année académique (optionnels)
-- ✅ Consultation des notes dans un tableau
-- ✅ Modification et suppression des notes via sélection
-- ✅ Calcul de la moyenne générale pondérée par les coefficients
-- ✅ **Traçabilité complète** : table `notes_audit` enregistre INSERT/UPDATE/DELETE avec date et utilisateur
+- Ajout d'une note avec contrôle (0 à 20)
+- Type d'évaluation et année académique (optionnels)
+- Consultation des notes dans un tableau
+- Modification et suppression des notes via sélection
+- Calcul de la moyenne générale pondérée par les coefficients
+- **Traçabilité complète** : table `notes_audit` enregistre INSERT/UPDATE/DELETE avec date et utilisateur
 
 ### 5. Onglet Absences
 
-- ✅ Enregistrement d'une absence : date, justificatif (oui/non), motif
-- ✅ Affichage des absences dans un tableau
-- ✅ Statistiques :
+- Enregistrement d'une absence : date, justificatif (oui/non), motif
+- Affichage des absences dans un tableau
+- Statistiques :
   - Nombre total d'absences
   - Taux "absences par étudiant"
-- ✅ Système d'alerte : liste des étudiants dépassant un seuil d'absences
+- Système d'alerte : liste des étudiants dépassant un seuil d'absences
 
 ### 6. Onglet Enseignants
 
-- ✅ Ajout d'un enseignant : nom, prénom, email (optionnel)
-- ✅ Affectation d'un enseignant à un module
-- ✅ Affichage des enseignants et affectations dans deux tableaux
+- Ajout d'un enseignant : nom, prénom, email (optionnel)
+- Affectation d'un enseignant à un module
+- Affichage des enseignants et affectations dans deux tableaux
 
 ### 7. Onglet Calendrier
 
-- ✅ Ajout de semestres (code, libellé, dates)
-- ✅ Ajout de périodes rattachées à un semestre
-- ✅ Affichage des semestres et périodes dans deux tableaux
+- Ajout de semestres (code, libellé, dates)
+- Ajout de périodes rattachées à un semestre
+- Affichage des semestres et périodes dans deux tableaux
 
 ### 8. Onglet Dashboard
 
-- ✅ Indicateurs clés (KPI) :
+- Indicateurs clés (KPI) :
   - Nombre d'étudiants, modules, inscriptions, absences
-- ✅ Top 5 des étudiants avec le plus d'absences
-- ✅ Bouton de rafraîchissement
+- Top 5 des étudiants avec le plus d'absences
+- Bouton de rafraîchissement
 
 ### 9. Onglet Documents
 
 #### Export Excel
-- ✅ Notes (liste complète)
-- ✅ Absences (liste complète)
+- Notes (liste complète)
+- Absences (liste complète)
 
 #### Génération PDF
-- ✅ Relevé de notes d'un étudiant avec moyenne générale pondérée
-- ✅ Attestation de scolarité pour une année académique donnée
+- Relevé de notes d'un étudiant avec moyenne générale pondérée
+- Attestation de scolarité pour une année académique donnée
 
 ---
 
@@ -246,12 +246,12 @@ python gestion_etudiants/main.py
 
 L'application développée permet de couvrir l'ensemble des fonctionnalités essentielles décrites dans le cahier des charges. Les différents modules sont opérationnels et interconnectés autour d'une base de données SQLite centralisée.
 
-- ✅ **Gestion des étudiants** : Ajout manuel, import CSV, consultation détaillée
-- ✅ **Structures académiques** : Configuration simple et fiable des filières, niveaux, modules
-- ✅ **Gestion des notes** : Saisie, modification, traçabilité complète, calculs automatiques
-- ✅ **Suivi des absences** : Enregistrement, alertes, statistiques
-- ✅ **Tableau de bord** : Indicateurs clés et classements
-- ✅ **Documents officiels** : Relevés PDF, attestations, exports Excel
+- **Gestion des étudiants** : Ajout manuel, import CSV, consultation détaillée
+- **Structures académiques** : Configuration simple et fiable des filières, niveaux, modules
+- **Gestion des notes** : Saisie, modification, traçabilité complète, calculs automatiques
+- **Suivi des absences** : Enregistrement, alertes, statistiques
+- **Tableau de bord** : Indicateurs clés et classements
+- **Documents officiels** : Relevés PDF, attestations, exports Excel
 
 ---
 
